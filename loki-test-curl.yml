@@ -1,0 +1,81 @@
+---
+# A workflow to run a linter
+
+name: LOKI-TEST-CURL
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events
+  # but only for the "devel" branch
+  push:
+    branches: ["master", "devel"]
+  pull_request:
+    branches: ["master", "devel"]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs
+# that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  loki_test_curl:
+    # The type of runner that the job will run on
+    runs-on: [linux]
+
+    # Steps represent a sequence of tasks
+    # that will be executed as part of the job
+    steps:
+      - name: save start time
+        run: echo "$( date +%s )" > start_time.dat
+
+      - name: print start
+        run: echo -n "Started workflow on " && date && echo -n "Start time " && date +%s
+
+      # Debug: print various environment vars
+      - name: print env
+        run: printenv | grep -E -i "HOST|PATH|SHELL|USER"
+
+      # Debug: print censored environment vars
+      - name: print env
+        run: printenv | sort | grep -v -E -i "secret|pass|code|token"
+        #run: printenv | sort
+
+      #- name: try and print /etc/os-release
+      #  run: if [ -f /etc/os-release ] ; then cat /etc/os-release ; fi
+
+      # Debug: test loki parms
+      #- name: test loki parms
+      #  env:
+      #    LOKI_PASSWORD: ${{secrets.LOKI_INGEST_PASSWORD}}
+      #    LOKI_TENANT: ${{secrets.LOKI_INGEST_TENANT}}
+      #  run: >
+      #    echo "$LOKI_PASSWORD" | md5sum && echo "$LOKI_TENANT" | md5sum
+
+      # Debug: send log message to loki
+      - name: send log message to loki
+        env:
+          LOKI_PASSWORD: ${{secrets.LOKI_INGEST_PASSWORD}}
+          LOKI_TENANT: ${{secrets.LOKI_INGEST_TENANT}}
+        run: >
+          AWS_ACCOUNT=my-aws-account &&
+          AWS_REGION=us-east-1 &&
+          LOKI_URL="https://loki.example.com/loki/api/v1/push" &&
+          OS_PRETTY_NAME=$( awk -F= '/PRETTY_NAME=/{print $2}' )
+          RUNNER_IP=$(  ip ad | grep -A 2 "^2" | awk '/inet/{print $2}' ) &&
+          tod_ymdhms=$( date +%Y%m%d-%H%M%S) &&
+          tod_nanos=$( date +%s)000000000 &&
+          message="this is a test message from a github-action-runner on $HOSTNAME" &&
+          echo "curl will send this data: {\"streams\": [{ \"stream\": { \"aws_account\": \"$AWS_ACCOUNT\", \"Product\": \"$LOKI_TENANT\", \"log_level\":\"info\", \"region\": \"$AWS_REGION\", \"repo_name\":\"$GITHUB_REPOSITORY\", \"repo_owner\":\"$GITHUB_REPOSITORY_OWNER\", \"github_server_url\":\"$GITHUB_SERVER_URL\", \"runner_hostname\":\"$HOSTNAME\", \"runner_ip\":\"$RUNNER_IP\", \"runner_name\":\"$RUNNER_NAME\", \"runner_os\":\"$RUNNER_OS\", \"runner_os_name\":\"$OS_PRETTY_NAME\", \"runner_type\":\"self_docker\", \"workflow_name\":\"$GITHUB_WORKFLOW\", \"workflow_trigger\":\"$GITHUB_TRIGGERING_ACTOR\", \"ymdhms\":\"$tod_ymdhms\" }, \"values\": [ [ \"$tod_nanos\", \"$message\" ] ] }]}" &&
+          curl    -u "${LOKI_TENANT}:${LOKI_PASSWORD}" \
+                  -i \
+                  -H "Content-Type: application/json" \
+                  -H "X-Scope-OrgID:$LOKI_TENANT" \
+                  -XPOST \
+                  -s "${LOKI_URL}" \
+                  --data-raw "{\"streams\": [{ \"stream\": { \"aws_account\": \"$AWS_ACCOUNT\", \"Product\": \"$LOKI_TENANT\", \"log_level\":\"info\", \"region\": \"$AWS_REGION\", \"repo_name\":\"$GITHUB_REPOSITORY\", \"repo_owner\":\"$GITHUB_REPOSITORY_OWNER\", \"github_server_url\":\"$GITHUB_SERVER_URL\", \"runner_hostname\":\"$HOSTNAME\", \"runner_ip\":\"$RUNNER_IP\", \"runner_name\":\"$RUNNER_NAME\", \"runner_os\":\"$RUNNER_OS\", \"runner_os_name\":\"$OS_PRETTY_NAME\", \"runner_type\":\"self_docker\", \"workflow_name\":\"$GITHUB_WORKFLOW\", \"workflow_trigger\":\"$GITHUB_TRIGGERING_ACTOR\", \"ymdhms\":\"$tod_ymdhms\" }, \"values\": [ [ \"$tod_nanos\", \"$message\" ] ] }]}"
+
+      # Debug: print start message
+      - name: print end
+        run: echo -n "Ended workflow on " && date && start_time=$( cat start_time.dat ) && end_time=$( date +%s ) && echo "start_time = $start_time ; end_time = $end_time ; duration = $(( end_time - start_time ))"
+...
